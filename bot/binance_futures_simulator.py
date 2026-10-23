@@ -168,7 +168,7 @@ class CrossPosition:
     quantity: float
     entry_price: float
     brackets: tuple[MaintenanceBracket, ...]
-    liquidation_fee_rate: float = 0.01
+    liquidation_fee_rate: float
 
     def __post_init__(self) -> None:
         if self.side not in ("LONG", "SHORT"):
@@ -248,8 +248,10 @@ class CrossMarginAccount:
             candidate[symbol] = price
             return self.is_liquidation_triggered(candidate)
 
-        # Search adverse direction; use a broad positive range and fail closed if
-        # no trigger can be bracketed with supplied maintenance tiers.
+        # A position already beyond the trigger has no future adverse threshold to solve.
+        if breached(current):
+            raise ValueError("account is already at or beyond the liquidation trigger at current marks")
+        # Search adverse direction and fail closed if the supplied tiers cannot bracket it.
         if target.side == "LONG":
             lo, hi = max(current * 1e-6, 1e-12), current
             if not breached(lo):
