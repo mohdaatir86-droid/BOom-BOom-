@@ -77,3 +77,24 @@ def test_invalid_brackets_and_missing_symbols_fail_closed():
         brackets_from_leverage_response([{"symbol": "BTCUSDT", "brackets": []}])
     with pytest.raises(ValueError, match="outside"):
         bracket_for_notional(sample_brackets(), 300_000)
+
+
+
+def test_price_filter_min_max_and_percent_price_band():
+    rules = BinanceMarketRules.from_exchange_info({
+        "symbol": "TESTUSDT", "status": "TRADING",
+        "filters": [
+            {"filterType": "PRICE_FILTER", "minPrice": "1", "maxPrice": "1000", "tickSize": "0.1"},
+            {"filterType": "LOT_SIZE", "minQty": "0.1", "maxQty": "100", "stepSize": "0.1"},
+            {"filterType": "MARKET_LOT_SIZE", "minQty": "0.1", "maxQty": "100", "stepSize": "0.1"},
+            {"filterType": "PERCENT_PRICE", "multiplierUp": "1.1", "multiplierDown": "0.9"},
+            {"filterType": "MIN_NOTIONAL", "minNotional": "5"},
+        ],
+    })
+    assert rules.validate_order(1, 105, reference_price=100) == pytest.approx((1, 105))
+    with pytest.raises(ValueError, match="upper band"):
+        rules.validate_order(1, 111, reference_price=100)
+    with pytest.raises(ValueError, match="reference_price"):
+        rules.validate_order(1, 100)
+    with pytest.raises(ValueError, match="minimum"):
+        rules.validate_order(1, 0.5, reference_price=1)

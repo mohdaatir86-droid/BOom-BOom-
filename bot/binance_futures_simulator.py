@@ -68,6 +68,10 @@ class BinanceMarketRules:
     tick_size: float
     min_notional: float
     max_notional: float | None = None
+    min_price: float = 0.0
+    max_price: float | None = None
+    percent_price_multiplier_up: float | None = None
+    percent_price_multiplier_down: float | None = None
 
     @classmethod
     def from_exchange_info(cls, symbol_record: Mapping[str, Any]) -> "BinanceMarketRules":
@@ -80,6 +84,9 @@ class BinanceMarketRules:
             raise ValueError("exchangeInfo record lacks LOT_SIZE, MARKET_LOT_SIZE, or PRICE_FILTER")
         min_notional = float((notional or {}).get("minNotional", 0) or 0)
         max_raw = (notional or {}).get("maxNotional")
+        min_price = float(price.get("minPrice", 0) or 0)
+        max_price_raw = price.get("maxPrice")
+        percent = filters.get("PERCENT_PRICE")
         return cls(
             symbol=str(symbol_record["symbol"]),
             status=str(symbol_record.get("status", "UNKNOWN")),
@@ -92,13 +99,17 @@ class BinanceMarketRules:
             tick_size=float(price["tickSize"]),
             min_notional=min_notional,
             max_notional=float(max_raw) if max_raw not in (None, "") else None,
+            min_price=min_price,
+            max_price=float(max_price_raw) if max_price_raw not in (None, "") else None,
+            percent_price_multiplier_up=float(percent["multiplierUp"]) if percent and percent.get("multiplierUp") else None,
+            percent_price_multiplier_down=float(percent["multiplierDown"]) if percent and percent.get("multiplierDown") else None,
         )
 
     @staticmethod
     def _round_down(value: float, step: float) -> float:
         return floor((value + step * 1e-10) / step) * step
 
-    def validate_order(self, quantity: float, price: float, *, market: bool = False) -> tuple[float, float]:
+    def validate_order(self, quantity: float, price: float, *, market: bool = False, reference_price: float | None = None) -> tuple[float, float]:
         if self.status != "TRADING":
             raise ValueError(f"{self.symbol} is not TRADING (status={self.status})")
         qty = _number("quantity", quantity, strict=True)
@@ -112,6 +123,18 @@ class BinanceMarketRules:
             raise ValueError("quantity below minimum after step rounding")
         if rounded_qty > max_qty:
             raise ValueError("quantity exceeds maximum")
+        if self.min_price and rounded_price < self.min_price:
+            raise ValueError("price below PRICE_FILTER minimum")
+        if self.max_price is not None and rounded_price > self.max_price:
+            raise ValueError("price exceeds PRICE_FILTER maximum")
+        if self.percent_price_multiplier_up is not None or self.percent_price_multiplier_down is not None:
+            if reference_price is None:
+                raise ValueError("reference_price is required to enforce PERCENT_PRICE filter")
+            reference = _number("reference_price", reference_price, strict=True)
+            if self.percent_price_multiplier_down is not None and rounded_price < reference * self.percent_price_multiplier_down:
+                raise ValueError("price below PERCENT_PRICE lower band")
+            if self.percent_price_multiplier_up is not None and rounded_price > reference * self.percent_price_multiplier_up:
+                raise ValueError("price above PERCENT_PRICE upper band")
         notional = rounded_qty * rounded_price
         if self.min_notional and notional < self.min_notional:
             raise ValueError("notional below minimum")
