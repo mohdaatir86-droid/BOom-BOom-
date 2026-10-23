@@ -1,0 +1,13 @@
+# Optional Render blueprint — research API only. Live trading disabled.
+# Owner must connect this repo in Render and set CORS_ORIGINS if needed.
+services:
+  - type: web
+    name: boom-boom-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        sync: false
