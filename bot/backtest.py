@@ -8,7 +8,7 @@ from .funding import apply_funding_to_trades
 from .metrics import equity_curve, summarize_trades
 
 
-def run_backtest(df, config=None, funding_df=None):
+def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=None, trade_start_time=None):
     """Simplified long-only research backtest; optional funding is post-applied to trade PnL."""
     cfg = config or BotConfig()
     validate_ohlcv(df)
