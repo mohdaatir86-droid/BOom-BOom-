@@ -189,3 +189,69 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def walk_forward_evaluate(candles, folds=3, config=None, funding_df=None, funding_mark_price_column=None):
+    """Chronological expanding-history walk-forward evaluation.
+
+    Each fold gets prior candles for indicator warm-up, but entries are allowed
+    only from that fold's held-out start. Folds reset to initial equity.
+    """
+    if not isinstance(folds, int) or isinstance(folds, bool) or folds < 2:
+        raise ValueError("folds must be an integer >= 2")
+    if "timestamp" not in candles.columns:
+        raise ValueError("candles must contain timestamp")
+    data = candles.copy()
+    data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True, errors="coerce")
+    if data["timestamp"].isna().any():
+        raise ValueError("candles contain invalid timestamps")
+    if data["timestamp"].duplicated().any():
+        raise ValueError("candle timestamps must be unique")
+    data = data.sort_values("timestamp").reset_index(drop=True)
+    if len(data) < folds * 3:
+        raise ValueError("not enough candles for requested folds")
+
+    first_test_index = max(2, len(data) // (folds + 1))
+    remaining = list(range(first_test_index, len(data)))
+    base, extra = divmod(len(remaining), folds)
+    chunks, cursor = [], 0
+    for i in range(folds):
+        size = base + (1 if i < extra else 0)
+        chunks.append(remaining[cursor:cursor + size])
+        cursor += size
+
+    cfg = config or BotConfig()
+    funding = None
+    if funding_df is not None:
+        if "timestamp" not in funding_df.columns:
+            raise ValueError("funding must contain timestamp")
+        funding = funding_df.copy()
+        funding["timestamp"] = pd.to_datetime(funding["timestamp"], utc=True, errors="coerce")
+        if funding["timestamp"].isna().any():
+            raise ValueError("funding contains invalid timestamps")
+
+    results = []
+    for fold_number, chunk in enumerate(chunks, start=1):
+        start_idx, end_idx = chunk[0], chunk[-1]
+        fold_start, fold_end = data.iloc[start_idx]["timestamp"], data.iloc[end_idx]["timestamp"]
+        history = data.iloc[:end_idx + 1].copy()
+        fold_funding = None if funding is None else funding.loc[
+            (funding["timestamp"] >= fold_start) & (funding["timestamp"] <= fold_end)
+        ].copy()
+        result = run_backtest(history, config=cfg, funding_df=fold_funding,
+                              funding_mark_price_column=funding_mark_price_column,
+                              trade_start_time=fold_start)
+        results.append({
+            "fold": fold_number, "test_start": fold_start.isoformat(),
+            "test_end": fold_end.isoformat(), "test_candles": len(chunk),
+            "trades": result["trades"], "final_equity": result["final_equity"],
+            "net_pnl": result["net_pnl"], "return_pct": result["return_pct"],
+            "max_drawdown_pct": result["max_drawdown_pct"],
+            "profit_factor": result["profit_factor"],
+            "funding_warning": result["funding_warning"],
+        })
+    return {
+        "folds": results,
+        "total_test_candles": sum(x["test_candles"] for x in results),
+        "warning": "Research-only estimate; each fold resets to initial equity. Not proof of profitability.",
+    }
