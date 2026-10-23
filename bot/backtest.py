@@ -18,6 +18,30 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
     trades = []
     risk_state = RiskState(start_of_day_equity=equity)
     active_day = None
+    funding_rows = []
+    funding_index = 0
+    funding_warning = None
+    if funding_df is not None:
+        required_funding = {"timestamp", "funding_rate"}
+        if not required_funding.issubset(funding_df.columns):
+            raise ValueError(f"funding must contain columns: {sorted(required_funding)}")
+        if funding_df.empty:
+            funding_warning = "Funding CSV is empty; funding is unknown, not confirmed zero."
+        else:
+            funding_rows = funding_df.copy()
+            funding_rows["timestamp"] = pd.to_datetime(funding_rows["timestamp"], utc=True, errors="coerce")
+            funding_rows["funding_rate"] = pd.to_numeric(funding_rows["funding_rate"], errors="coerce")
+            if funding_rows[["timestamp", "funding_rate"]].isna().any().any():
+                raise ValueError("Funding timestamps/rates contain invalid values")
+            if funding_mark_price_column and funding_mark_price_column not in funding_rows.columns:
+                raise ValueError(f"Missing mark-price column: {funding_mark_price_column}")
+            if funding_mark_price_column:
+                funding_rows[funding_mark_price_column] = pd.to_numeric(funding_rows[funding_mark_price_column], errors="coerce")
+                if funding_rows[funding_mark_price_column].isna().any() or (funding_rows[funding_mark_price_column] <= 0).any():
+                    raise ValueError("Funding mark prices must be valid and positive")
+            funding_rows = funding_rows.sort_values("timestamp").reset_index(drop=True)
+            if funding_rows["timestamp"].duplicated().any():
+                raise ValueError("Funding timestamps must be unique")
     peak_marked_equity = equity
     max_marked_drawdown_pct = 0.0
 
@@ -31,6 +55,16 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
             active_day = bar_day
             risk_state = RiskState(start_of_day_equity=equity)
         exited_this_bar = False
+        while funding_index < len(funding_rows) and funding_rows.iloc[funding_index]["timestamp"] <= bar_time:
+            funding_row = funding_rows.iloc[funding_index]
+            funding_index += 1
+            if position is None or funding_row["timestamp"] <= pd.to_datetime(position["time"], utc=True):
+                continue
+            mark = float(funding_row[funding_mark_price_column]) if funding_mark_price_column else float(prev["close"])
+            funding_pnl = -float(position["qty"]) * mark * float(funding_row["funding_rate"])
+            equity += funding_pnl
+            position["funding_pnl"] = float(position.get("funding_pnl", 0.0)) + funding_pnl
+            risk_state.record_realized_pnl(funding_pnl, cfg.daily_loss_limit)
         if position:
             exit_price, reason = None, ""
             # Conservative intrabar ordering: if both touched, assume stop first.
@@ -47,10 +81,13 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
                 pnl = position["qty"] * (fill - position["entry"]) - fees
                 equity += pnl
                 risk_state.record_realized_pnl(pnl, cfg.daily_loss_limit)
+                funding_pnl = float(position.get("funding_pnl", 0.0))
                 trades.append({
                     "entry_time": position["time"], "exit_time": row["timestamp"],
                     "entry": position["entry"], "exit": fill, "qty": position["qty"],
-                    "initial_risk": position["initial_risk"], "pnl_net": pnl, "reason": reason,
+                    "initial_risk": position["initial_risk"], "pnl_net_before_funding": pnl,
+                    "funding_pnl_estimate": funding_pnl, "pnl_net_after_funding_estimate": pnl + funding_pnl,
+                    "pnl_net": pnl + funding_pnl, "reason": reason,
                 })
                 position = None
                 exited_this_bar = True
@@ -71,7 +108,7 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
             if qty > 0:
                 position = {
                     "time": row["timestamp"], "entry": entry, "stop": stop,
-                    "target": target, "qty": qty, "initial_risk": qty * (entry - stop),
+                    "target": target, "qty": qty, "initial_risk": qty * (entry - stop), "funding_pnl": 0.0,
                 }
 
         # Track intra-trade equity troughs, including estimated exit costs.
@@ -98,20 +135,18 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
         trades.append({
             "entry_time": position["time"], "exit_time": data.iloc[-1]["timestamp"],
             "entry": position["entry"], "exit": last, "qty": position["qty"],
-            "initial_risk": position["initial_risk"], "pnl_net": pnl, "reason": "end_of_data",
+            "initial_risk": position["initial_risk"], "pnl_net_before_funding": pnl,
+            "funding_pnl_estimate": float(position.get("funding_pnl", 0.0)),
+            "pnl_net_after_funding_estimate": pnl + float(position.get("funding_pnl", 0.0)),
+            "pnl_net": pnl + float(position.get("funding_pnl", 0.0)), "reason": "end_of_data",
         })
 
-    funding_warning = None
-    if funding_df is not None:
-        if funding_df.empty:
-            funding_warning = "Funding CSV is empty; funding adjustment is zero only because no records were supplied, not because funding was zero."
-        else:
-            trades = apply_funding_to_trades(trades, funding_df)
-            for trade in trades:
-                trade["pnl_net_before_funding"] = float(trade["pnl_net"])
-                # Keep reported metrics and equity consistent with estimated funding PnL.
-                trade["pnl_net"] = float(trade["pnl_net_after_funding_estimate"])
-            funding_warning = "Funding estimated using entry-price proxy; summary metrics include estimated funding. Use mark-price observations for more accurate estimates."
+    if funding_df is not None and not funding_df.empty:
+        funding_warning = (
+            "Funding applied at event time to equity and daily-loss checks. "
+            + ("Supplied mark-price column used." if funding_mark_price_column else
+               "Previous candle close used as a mark-price proxy between candle timestamps.")
+        )
 
     metrics = summarize_trades(trades, cfg.initial_equity)
     curve = equity_curve(trades, cfg.initial_equity)
@@ -142,9 +177,10 @@ def main():
     parser.add_argument("--csv", required=True)
     parser.add_argument("--funding-csv", help="Optional funding history CSV from bot.futures_data")
     parser.add_argument("--equity", type=float, default=10000)
+    parser.add_argument("--funding-mark-price-column", help="Optional mark-price column in funding CSV")
     args = parser.parse_args()
     funding = pd.read_csv(args.funding_csv) if args.funding_csv else None
-    result = run_backtest(pd.read_csv(args.csv), BotConfig(initial_equity=args.equity), funding)
+    result = run_backtest(pd.read_csv(args.csv), BotConfig(initial_equity=args.equity), funding, args.funding_mark_price_column)
     for key, value in result.items():
         if key != "trades_detail":
             print(f"{key}: {value}")
