@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 from pathlib import Path
 import pandas as pd
 from .config import BotConfig
@@ -35,6 +36,30 @@ def append_journal(result: dict, path: str = "data/paper_journal.jsonl") -> None
         handle.write(json.dumps(result, sort_keys=True) + "\n")
 
 
+def _append_event_once(event: dict, path: str) -> None:
+    """Append each simulated event once, even when replay resumes after a crash."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    event_id = event["event_id"]
+    if target.exists():
+        with target.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    if json.loads(line).get("event_id") == event_id:
+                        return
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Corrupted trade journal line in {target}") from exc
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, sort_keys=True) + "\n")
+
+
+def _save_state_atomic(state: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(state, sort_keys=True, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
                          state_path: str = "data/paper_state.json",
                          journal_path: str = "data/paper_trades.jsonl") -> dict:
@@ -46,7 +71,22 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
     data = generate_signals(candles, cfg).reset_index(drop=True)
     state_file = Path(state_path)
     if state_file.exists():
-        state = json.loads(state_file.read_text(encoding="utf-8"))
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"Corrupted paper state file: {state_file}") from exc
+        required_state = {"equity", "position", "last_timestamp", "realized_pnl_today", "active_day", "halted"}
+        if not isinstance(state, dict) or not required_state.issubset(state):
+            raise ValueError(f"Invalid paper state schema in {state_file}")
+        try:
+            if float(state["equity"]) <= 0 or not pd.notna(float(state["equity"])):
+                raise ValueError
+            if state["last_timestamp"] is not None and pd.isna(pd.to_datetime(state["last_timestamp"], utc=True, errors="coerce")):
+                raise ValueError
+            if not isinstance(state["halted"], bool):
+                raise ValueError
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid paper state values in {state_file}") from exc
     else:
         state = {"equity": float(cfg.initial_equity), "position": None, "last_timestamp": None,
                  "realized_pnl_today": 0.0, "active_day": None, "halted": False}
@@ -80,10 +120,10 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
                 pnl = pos["qty"] * (fill - pos["entry"]) - fees
                 state["equity"] += pnl
                 state["realized_pnl_today"] += pnl
-                trade = {"event": "exit", "timestamp": iso, "entry_time": pos["time"],
+                trade = {"event": "exit", "event_id": f"exit:{iso}:{pos['time']}", "timestamp": iso, "entry_time": pos["time"],
                          "entry": pos["entry"], "exit": fill, "qty": pos["qty"],
                          "pnl_net": pnl, "reason": reason, "equity": state["equity"]}
-                append_journal(trade, journal_path)
+                _append_event_once(trade, journal_path)
                 events.append(trade)
                 state["position"] = None
                 if state["realized_pnl_today"] <= -state["equity"] * cfg.daily_loss_limit:
@@ -101,13 +141,12 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
                     if qty > 0:
                         state["position"] = {"time": iso, "entry": entry, "stop": stop,
                                              "target": target, "qty": qty}
-                        trade = {"event": "entry", "timestamp": iso, **state["position"],
+                        trade = {"event": "entry", "event_id": f"entry:{iso}", "timestamp": iso, **state["position"],
                                  "equity": state["equity"], "mode": "PAPER_ONLY"}
-                        append_journal(trade, journal_path)
+                        _append_event_once(trade, journal_path)
                         events.append(trade)
         state["last_timestamp"] = iso
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        state_file.write_text(json.dumps(state, sort_keys=True, indent=2), encoding="utf-8")
+        _save_state_atomic(state, state_file)
     return {"mode": "PAPER_ONLY", "events_processed": len(events), "state": state,
             "warning": "Offline candle replay only; no exchange orders, no exact live fills, no liquidation model."}
 
@@ -116,10 +155,16 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate and journal a paper-only signal.")
     parser.add_argument("--csv", required=True)
     parser.add_argument("--journal", default="data/paper_journal.jsonl")
+    parser.add_argument("--simulate", action="store_true", help="Replay candles through offline paper positions; never places orders")
+    parser.add_argument("--state", default="data/paper_state.json")
+    parser.add_argument("--trade-journal", default="data/paper_trades.jsonl")
     args = parser.parse_args()
-    result = evaluate_latest(args.csv)
-    append_journal(result, args.journal)
-    print(json.dumps(result, indent=2))
+    if args.simulate:
+        result = run_paper_simulation(pd.read_csv(args.csv), state_path=args.state, journal_path=args.trade_journal)
+    else:
+        result = evaluate_latest(args.csv)
+        append_journal(result, args.journal)
+    print(json.dumps(result, indent=2)
 
 
 if __name__ == "__main__":

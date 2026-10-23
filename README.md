@@ -32,6 +32,7 @@ python -m bot.walk_forward --csv data/BTC_USDT_1h.csv --train-size 500 --test-si
 python -m bot.backtest --csv data/BTC_USDT_PERP_1h.csv --funding-csv data/BTC_USDT_funding.csv --equity 10000
 python -m bot.signal --csv data/BTC_USDT_1h.csv
 python -m bot.paper --csv data/BTC_USDT_1h.csv --journal data/paper_journal.jsonl
+python -m bot.paper --csv data/BTC_USDT_1h.csv --simulate --state data/paper_state.json --trade-journal data/paper_trades.jsonl
 ```
 Windows activation: `.venv\\Scripts\\activate`.
 
@@ -39,8 +40,8 @@ CSV columns: `timestamp,open,high,low,close,volume`, strictly chronological, wit
 
 ## Important limitations
 - No exchange connection or real-money order placement.
-- The daily loss guard is a helper and is not yet wired into backtest/order orchestration. Paper journaling records signal snapshots only; it is not a full simulated fill/position engine.
-- Backtest execution assumptions are simplified; futures funding data can be optionally applied to trade PnL using an entry-price proxy; exchange-specific fees, partial fills, gaps and liquidation are not fully modelled.
+- The daily-loss guard is applied in the simplified backtest and offline paper simulator. `bot.paper` defaults to signal journaling; pass `--simulate` for offline simulated fills and persistent state. This is not an exchange-connected execution engine.
+- Backtest execution assumptions are simplified; funding is applied at event timestamps, using an optional supplied mark-price column or previous candle close as a disclosed proxy. Exchange-specific tick/lot rules, partial fills, spread, margin tiers and liquidation are not fully modelled.
 - This is not proof of a profitable edge. Do not deploy to live trading based on these results.
 - Before live trading: add reliable exchange data, venue-specific costs/funding, chronological out-of-sample and walk-forward tests, robust order reconciliation, monitoring, hard exposure/drawdown controls, and independently tested emergency stop.
 - Store secrets only in environment/secret management; never commit API keys.
