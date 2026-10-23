@@ -57,4 +57,13 @@ features = align_open_interest(candles, open_interest, tolerance="2h")
 
 This backward-only timestamp join prevents future OI records from being attached to earlier candles. See [`docs/OPEN_INTEREST_FEATURES.md`](docs/OPEN_INTEREST_FEATURES.md) for caveats and example details. The feature is not yet a validated trading signal.
 
+### Walk-forward evaluation options
+
+The repository currently exposes two research interfaces:
+
+- Rolling train/test windows: `python -m bot.walk_forward --csv data/BTC_USDT_1h.csv --train-size 500 --test-size 100 --equity 10000`
+- Expanding-history folds: call `walk_forward_evaluate(...)` from `bot.backtest` in Python. Each fold resets to initial equity and reports fold-level metrics.
+
+These are separate diagnostic views, not a combined live-equity simulation. Compare held-out trade counts and fold boundaries carefully; neither interface proves future profitability.
+
 Backtest verification checklist: [`docs/BACKTEST_VERIFICATION_GATES.md`](docs/BACKTEST_VERIFICATION_GATES.md). This lists unresolved simulator requirements and prevents CI success from being mistaken for evidence of profitability.

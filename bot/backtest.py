@@ -9,7 +9,13 @@ from .metrics import equity_curve, summarize_trades
 
 
 def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=None, trade_start_time=None):
-    """Simplified long-only research backtest; optional funding is post-applied to trade PnL."""
+    """Simplified long-only research backtest with event-time funding estimates.
+
+    Funding is applied to running equity/risk state at each observed event and
+    recorded on the eventual trade for reporting. Final equity is reconstructed
+    from the trade ledger; tests must ensure funding is included exactly once.
+    This is an OHLCV approximation, not an exchange execution simulator.
+    """
     cfg = config or BotConfig()
     validate_ohlcv(df)
     data = generate_signals(df, cfg).reset_index(drop=True)
