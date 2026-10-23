@@ -15,6 +15,7 @@ def run_backtest(df, config=None):
     trades=[]
     for i in range(1,len(data)):
         row,prev=data.iloc[i],data.iloc[i-1]
+        exited_this_bar = False
         if position:
             exit_price,reason=None,""
             # Conservative assumption if stop and target hit in same candle: stop first.
@@ -29,10 +30,13 @@ def run_backtest(df, config=None):
                 equity+=pnl
                 trades.append({"entry_time":position["time"],"exit_time":row["timestamp"],"entry":position["entry"],"exit":fill,"qty":position["qty"],"pnl_net":pnl,"reason":reason})
                 position=None
+                exited_this_bar = True
                 peak=max(peak,equity)
                 max_dd=max(max_dd,(peak-equity)/peak if peak else 0)
         # Completed prior candle signal; next candle open entry.
-        if position is None and bool(prev["long_signal"]):
+        # Avoid an impossible same-bar re-entry: the candle's open occurred
+        # before we knew the existing position would hit its stop/target.
+        if position is None and not exited_this_bar and bool(prev["long_signal"]):
             entry=float(row["open"])*(1+cfg.slippage_rate)
             atr=float(prev["atr"])
             if pd.isna(atr) or atr<=0: continue
