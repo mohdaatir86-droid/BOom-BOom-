@@ -8,7 +8,7 @@ Safety-first crypto research scaffold. Current mode: **backtesting/paper signals
 - OHLCV validation and EMA/RSI/ATR indicators
 - Long-only baseline signal hypothesis (not a proven profitable strategy)
 - Risk-based position sizing helper and daily realized-loss guard
-- Simplified backtester with illustrative fee/slippage assumptions
+- Simplified backtester with illustrative fee/slippage assumptions, optional funding adjustment and expectancy/R metrics
 - Candlestick feature flags with tests (research features, not standalone signals)
 - Trade expectancy/R-multiple summary helpers and realized-equity curve
 - Deterministic paper-signal journal; never places orders
@@ -25,6 +25,7 @@ pytest -q
 python -m bot.data --exchange binance --symbol BTC/USDT --timeframe 1h --limit 500 --out data/BTC_USDT_1h.csv
 python -m bot.futures_data --exchange binanceusdm --symbol BTC/USDT --timeframe 1h --limit 1000 --out data/BTC_USDT_PERP_1h.csv --funding-out data/BTC_USDT_funding.csv
 python -m bot.backtest --csv data/BTC_USDT_1h.csv --equity 10000
+python -m bot.backtest --csv data/BTC_USDT_PERP_1h.csv --funding-csv data/BTC_USDT_funding.csv --equity 10000
 python -m bot.signal --csv data/BTC_USDT_1h.csv
 python -m bot.paper --csv data/BTC_USDT_1h.csv --journal data/paper_journal.jsonl
 ```
@@ -35,7 +36,7 @@ CSV columns: `timestamp,open,high,low,close,volume`, strictly chronological, wit
 ## Important limitations
 - No exchange connection or real-money order placement.
 - The daily loss guard is a helper and is not yet wired into backtest/order orchestration. Paper journaling records signal snapshots only; it is not a full simulated fill/position engine.
-- Backtest execution assumptions are simplified; futures funding data can now be downloaded but is not yet applied to PnL; exchange-specific fees, partial fills, gaps and liquidation are not fully modelled.
+- Backtest execution assumptions are simplified; futures funding data can be optionally applied to trade PnL using an entry-price proxy; exchange-specific fees, partial fills, gaps and liquidation are not fully modelled.
 - This is not proof of a profitable edge. Do not deploy to live trading based on these results.
 - Before live trading: add reliable exchange data, venue-specific costs/funding, chronological out-of-sample and walk-forward tests, robust order reconciliation, monitoring, hard exposure/drawdown controls, and independently tested emergency stop.
 - Store secrets only in environment/secret management; never commit API keys.
