@@ -3,6 +3,7 @@
 Safety-first crypto research scaffold. Current mode: **backtesting/paper signals only**. No live exchange orders are implemented.
 
 ## What's in this repository
+- Read-only public crypto OHLCV downloader via CCXT (no API keys needed)
 - OHLCV validation and EMA/RSI/ATR indicators
 - Long-only baseline signal hypothesis (not a proven profitable strategy)
 - Risk-based position sizing helper and daily realized-loss guard
@@ -17,12 +18,13 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pytest -q
-python -m bot.backtest --csv path/to/ohlcv.csv --equity 10000
-python -m bot.signal --csv path/to/ohlcv.csv
+python -m bot.data --exchange binance --symbol BTC/USDT --timeframe 1h --limit 500 --out data/BTC_USDT_1h.csv
+python -m bot.backtest --csv data/BTC_USDT_1h.csv --equity 10000
+python -m bot.signal --csv data/BTC_USDT_1h.csv
 ```
 Windows activation: `.venv\\Scripts\\activate`.
 
-CSV columns: `timestamp,open,high,low,close,volume`, strictly chronological, with valid positive OHLC prices. Timestamps should parse as dates. Do not use synthetic data to judge strategy performance.
+CSV columns: `timestamp,open,high,low,close,volume`, strictly chronological, with valid positive OHLC prices. Timestamps should parse as dates. The downloader fetches recent public candles; the latest candle may still be incomplete. For research, remove incomplete candles and collect enough history. Do not use synthetic data to judge strategy performance.
 
 ## Important limitations
 - No exchange connection or real-money order placement.
