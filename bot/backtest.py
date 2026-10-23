@@ -74,7 +74,11 @@ def run_backtest(df, config=None, funding_df=None):
             funding_warning = "Funding CSV is empty; funding adjustment is zero only because no records were supplied, not because funding was zero."
         else:
             trades = apply_funding_to_trades(trades, funding_df)
-            funding_warning = "Funding estimated using entry-price proxy; use mark-price observations for more accurate estimates."
+            for trade in trades:
+                trade["pnl_net_before_funding"] = float(trade["pnl_net"])
+                # Keep reported metrics and equity consistent with estimated funding PnL.
+                trade["pnl_net"] = float(trade["pnl_net_after_funding_estimate"])
+            funding_warning = "Funding estimated using entry-price proxy; summary metrics include estimated funding. Use mark-price observations for more accurate estimates."
 
     metrics = summarize_trades(trades, cfg.initial_equity)
     curve = equity_curve(trades, cfg.initial_equity)
@@ -92,7 +96,7 @@ def run_backtest(df, config=None, funding_df=None):
         "expectancy_r": metrics["expectancy_r"],
         "max_consecutive_losses": metrics["max_consecutive_losses"],
         "max_drawdown_pct": round(max_drawdown, 3),
-        "funding_adjusted": funding_df is not None,
+        "funding_adjusted": funding_df is not None and not funding_df.empty,
         "funding_warning": funding_warning,
         "trades_detail": trades,
         "warning": "Simplified research backtest, not a futures-execution simulator and not proof of live profitability.",
