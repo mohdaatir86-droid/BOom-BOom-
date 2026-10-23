@@ -18,6 +18,8 @@ def run_backtest(df, config=None, funding_df=None):
     trades = []
     risk_state = RiskState(start_of_day_equity=equity)
     active_day = None
+    peak_marked_equity = equity
+    max_marked_drawdown_pct = 0.0
 
     for i in range(1, len(data)):
         row, prev = data.iloc[i], data.iloc[i - 1]
@@ -32,7 +34,10 @@ def run_backtest(df, config=None, funding_df=None):
         if position:
             exit_price, reason = None, ""
             # Conservative intrabar ordering: if both touched, assume stop first.
-            if row["low"] <= position["stop"]:
+            if row["open"] <= position["stop"]:
+                # If price gaps below the stop, assume an adverse open fill.
+                exit_price, reason = float(row["open"]), "stop_gap"
+            elif row["low"] <= position["stop"]:
                 exit_price, reason = position["stop"], "stop"
             elif row["high"] >= position["target"]:
                 exit_price, reason = position["target"], "target"
@@ -68,6 +73,20 @@ def run_backtest(df, config=None, funding_df=None):
                     "target": target, "qty": qty, "initial_risk": qty * (entry - stop),
                 }
 
+        # Track intra-trade equity troughs, including estimated exit costs.
+        unrealized = 0.0
+        if position is not None:
+            mark = float(row["close"])
+            unrealized = position["qty"] * (mark - position["entry"])
+            unrealized -= position["qty"] * mark * (cfg.fee_rate + cfg.slippage_rate)
+        marked_equity = equity + unrealized
+        peak_marked_equity = max(peak_marked_equity, marked_equity)
+        if peak_marked_equity > 0:
+            max_marked_drawdown_pct = max(
+                max_marked_drawdown_pct,
+                (peak_marked_equity - marked_equity) / peak_marked_equity * 100,
+            )
+
     if position is not None and len(data):
         last = float(data.iloc[-1]["close"]) * (1 - cfg.slippage_rate)
         fees = position["qty"] * (position["entry"] + last) * cfg.fee_rate
@@ -93,7 +112,8 @@ def run_backtest(df, config=None, funding_df=None):
     metrics = summarize_trades(trades, cfg.initial_equity)
     curve = equity_curve(trades, cfg.initial_equity)
     final_equity = float(curve.iloc[-1]["equity"])
-    max_drawdown = float(curve["drawdown_pct"].max()) if len(curve) else 0.0
+    realized_drawdown = float(curve["drawdown_pct"].max()) if len(curve) else 0.0
+    max_drawdown = max(realized_drawdown, max_marked_drawdown_pct)
     return {
         "initial_equity": cfg.initial_equity,
         "final_equity": round(final_equity, 2),
