@@ -16,3 +16,18 @@ def test_daily_loss_halts_entries():
     state = RiskState(10000)
     state.record_realized_pnl(-151, 0.015)
     assert state.halted and not state.can_open_new_position()
+
+
+def test_unrealized_daily_loss_halts_new_entries():
+    state = RiskState(10000)
+    state.check_daily_loss(-151, 0.015)
+    assert state.halted
+    assert state.halt_reason == "daily_loss_limit"
+    assert not state.can_open_new_position()
+
+
+def test_realized_and_unrealized_loss_are_combined():
+    state = RiskState(10000)
+    state.record_realized_pnl(-80, 0.015)
+    state.check_daily_loss(-71, 0.015)
+    assert state.halted

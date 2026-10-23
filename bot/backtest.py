@@ -56,7 +56,8 @@ def run_backtest(df, config=None, funding_df=None):
                 exited_this_bar = True
 
         # Signal is from completed prior candle; entry occurs at current open.
-        if position is None and not exited_this_bar and risk_state.can_open_new_position() and bool(prev["long_signal"]):
+        start_ok = trade_start_time is None or bar_time >= pd.to_datetime(trade_start_time, utc=True)
+        if position is None and not exited_this_bar and start_ok and risk_state.can_open_new_position() and bool(prev["long_signal"]):
             entry = float(row["open"]) * (1 + cfg.slippage_rate)
             atr = float(prev["atr"])
             if pd.isna(atr) or atr <= 0:
