@@ -262,8 +262,10 @@ class CrossMarginAccount:
                     hi = mid
             return (lo + hi) / 2
         else:
-            lo, hi = current, current * 1e6
-            if not breached(hi):
+            lo = current
+            # Stay inside the highest supplied bracket; never extrapolate a tier.
+            hi = max(t.notional_cap for t in target.brackets) / target.quantity
+            if hi <= lo or not breached(hi):
                 raise ValueError("could not bracket short liquidation within supplied tiers")
             for _ in range(100):
                 mid = (lo + hi) / 2
