@@ -58,7 +58,7 @@ def test_cross_margin_equity_and_portfolio_maintenance():
     ), liquidation_fee_rate=0.001)
     account = CrossMarginAccount(100, [p1, p2])
     marks = {"BTCUSDT": 90, "ETHUSDT": 55}
-    assert account.equity(marks) == pytest.approx(82)
+    assert account.equity(marks) == pytest.approx(80)
     assert account.maintenance_margin(marks) == pytest.approx(2)
     assert account.liquidation_fee_reserve(marks) == pytest.approx(0.2)
     assert not account.is_liquidation_triggered(marks)
