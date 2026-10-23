@@ -54,3 +54,5 @@ features = align_open_interest(candles, open_interest, tolerance="2h")
 ```
 
 This backward-only timestamp join prevents future OI records from being attached to earlier candles. See [`docs/OPEN_INTEREST_FEATURES.md`](docs/OPEN_INTEREST_FEATURES.md) for caveats and example details. The feature is not yet a validated trading signal.
+
+Backtest verification checklist: [`docs/BACKTEST_VERIFICATION_GATES.md`](docs/BACKTEST_VERIFICATION_GATES.md). This lists unresolved simulator requirements and prevents CI success from being mistaken for evidence of profitability.
