@@ -47,10 +47,12 @@ def download_ohlcv(exchange_id="binance", symbol="BTC/USDT", timeframe="1h", lim
     if not exchange.has.get("fetchOHLCV"):
         raise ValueError(f"{exchange_id} does not support OHLCV fetching through CCXT")
 
-    # Binance documents this host specifically for unauthenticated public market
-    # data. Use the official market-data-only REST base rather than the general
-    # API host; this is not an authenticated or order-capable endpoint.
     if exchange_id == "binance":
+        # Only load spot markets: otherwise CCXT may call futures market metadata
+        # (fapi.binance.com), which is unrelated to this spot OHLCV research flow.
+        exchange.options["defaultType"] = "spot"
+        exchange.options["fetchMarkets"] = ["spot"]
+        # Official public market-data-only REST base; no authentication or orders.
         exchange.urls["api"]["public"] = "https://data-api.binance.vision/api/v3"
 
     exchange.load_markets()
