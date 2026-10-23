@@ -48,4 +48,4 @@ def test_mark_price_column_is_used_for_funding_estimate():
     })
     result = apply_funding_to_trades(trades, funding, mark_price_column="mark_price")[0]
     assert result["funding_pnl_estimate"] == pytest.approx(-0.24)
-    assert result["funding_mark_price_method"] == "mark_price_column"
+    assert result["funding_mark_price_method"] == "provided_mark_price"
