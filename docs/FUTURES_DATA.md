@@ -18,3 +18,8 @@ This uses public CCXT endpoints only. No API key, account access, or order endpo
 - Open interest history is not included yet.
 - Do not infer funding cost by multiplying a single latest funding rate over all periods. Funding must be joined to positions at actual funding timestamps and directionally accounted for in the backtester.
 - This data adapter does not trade or read private account data.
+
+
+## Funding cost research helper
+
+`bot/funding.py` estimates funding PnL for already-recorded long trades using actual funding timestamps. By default it uses entry price as a proxy for mark price; this is approximate, not venue-exact. If mark-price observations are available, pass a `mark_price` column and set `mark_price_column="mark_price"`. This helper is not yet integrated into the main backtest equity curve, so do not interpret the existing backtest metrics as funding-adjusted.
