@@ -13,7 +13,7 @@ This module models a **single-asset USDT-margined cross-margin approximation** u
 ## What is modeled
 
 - Per-symbol maintenance-margin tiers, using Binance's `maintMarginRatio` and cumulative `cum` amount.
-- Symbol trading status, `PRICE_FILTER` min/max price and tick size, `LOT_SIZE`, `MARKET_LOT_SIZE`, `PERCENT_PRICE` bands when present, and minimum/maximum notional fields where provided. Percent-price checks require a caller-supplied reference price.
+- Symbol trading status, `PRICE_FILTER` min/max price and tick size, `LOT_SIZE`, `MARKET_LOT_SIZE`, `PERCENT_PRICE` bands when present, and minimum/maximum notional fields where provided. Percent-price checks require a caller-supplied reference price. Known `MAX_NUM_ORDERS` and `MAX_NUM_ALGO_ORDERS` limits can be checked when the caller supplies current counts (including the proposed order as appropriate).
 - Portfolio equity as wallet balance plus unrealized PnL; portfolio maintenance margin and configured liquidation-fee reserve.
 - Approximate cross-margin liquidation trigger price for one symbol while holding other symbols' mark prices constant.
 

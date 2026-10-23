@@ -72,6 +72,8 @@ class BinanceMarketRules:
     max_price: float | None = None
     percent_price_multiplier_up: float | None = None
     percent_price_multiplier_down: float | None = None
+    max_num_orders: int | None = None
+    max_num_algo_orders: int | None = None
 
     @classmethod
     def from_exchange_info(cls, symbol_record: Mapping[str, Any]) -> "BinanceMarketRules":
@@ -87,6 +89,8 @@ class BinanceMarketRules:
         min_price = float(price.get("minPrice", 0) or 0)
         max_price_raw = price.get("maxPrice")
         percent = filters.get("PERCENT_PRICE")
+        max_orders = filters.get("MAX_NUM_ORDERS")
+        max_algo_orders = filters.get("MAX_NUM_ALGO_ORDERS")
         return cls(
             symbol=str(symbol_record["symbol"]),
             status=str(symbol_record.get("status", "UNKNOWN")),
@@ -103,7 +107,25 @@ class BinanceMarketRules:
             max_price=float(max_price_raw) if max_price_raw not in (None, "") else None,
             percent_price_multiplier_up=float(percent["multiplierUp"]) if percent and percent.get("multiplierUp") else None,
             percent_price_multiplier_down=float(percent["multiplierDown"]) if percent and percent.get("multiplierDown") else None,
+            max_num_orders=int(max_orders["limit"]) if max_orders and max_orders.get("limit") is not None else None,
+            max_num_algo_orders=int(max_algo_orders["limit"]) if max_algo_orders and max_algo_orders.get("limit") is not None else None,
         )
+
+
+    def validate_order_capacity(self, *, open_orders: int, open_algo_orders: int = 0) -> None:
+        """Check known per-symbol order-count limits before a caller submits an order.
+
+        Counts must include the proposed order where appropriate; this method only
+        compares supplied counts with metadata limits and does not query an account.
+        """
+        if isinstance(open_orders, bool) or not isinstance(open_orders, int) or open_orders < 0:
+            raise ValueError("open_orders must be a non-negative integer")
+        if isinstance(open_algo_orders, bool) or not isinstance(open_algo_orders, int) or open_algo_orders < 0:
+            raise ValueError("open_algo_orders must be a non-negative integer")
+        if self.max_num_orders is not None and open_orders > self.max_num_orders:
+            raise ValueError("MAX_NUM_ORDERS limit exceeded")
+        if self.max_num_algo_orders is not None and open_algo_orders > self.max_num_algo_orders:
+            raise ValueError("MAX_NUM_ALGO_ORDERS limit exceeded")
 
     @staticmethod
     def _round_down(value: float, step: float) -> float:

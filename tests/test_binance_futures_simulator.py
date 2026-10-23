@@ -98,3 +98,24 @@ def test_price_filter_min_max_and_percent_price_band():
         rules.validate_order(1, 100)
     with pytest.raises(ValueError, match="minimum"):
         rules.validate_order(1, 0.5, reference_price=1)
+
+
+
+def test_order_count_filters_are_parsed_and_enforced():
+    rules = BinanceMarketRules.from_exchange_info({
+        "symbol": "TESTUSDT", "status": "TRADING",
+        "filters": [
+            {"filterType": "PRICE_FILTER", "minPrice": "1", "maxPrice": "1000", "tickSize": "0.1"},
+            {"filterType": "LOT_SIZE", "minQty": "0.1", "maxQty": "100", "stepSize": "0.1"},
+            {"filterType": "MARKET_LOT_SIZE", "minQty": "0.1", "maxQty": "100", "stepSize": "0.1"},
+            {"filterType": "MAX_NUM_ORDERS", "limit": 5},
+            {"filterType": "MAX_NUM_ALGO_ORDERS", "limit": 2},
+        ],
+    })
+    rules.validate_order_capacity(open_orders=5, open_algo_orders=2)
+    with pytest.raises(ValueError, match="MAX_NUM_ORDERS"):
+        rules.validate_order_capacity(open_orders=6)
+    with pytest.raises(ValueError, match="MAX_NUM_ALGO_ORDERS"):
+        rules.validate_order_capacity(open_orders=1, open_algo_orders=3)
+    with pytest.raises(ValueError, match="non-negative"):
+        rules.validate_order_capacity(open_orders=-1)
