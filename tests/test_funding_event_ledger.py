@@ -11,7 +11,7 @@ def test_funding_event_is_applied_at_event_time_and_once(monkeypatch):
     })
     signals = candles.copy()
     signals["atr"] = [1.] * len(candles)
-    signals["long_signal"] = [False, True, False, False, False]
+    signals["long_signal"] = [True, False, False, False, False]
     monkeypatch.setattr(backtest, "generate_signals", lambda df, cfg: signals.copy())
     funding = pd.DataFrame({"timestamp": [candles.timestamp.iloc[2]], "funding_rate": [0.001], "mark": [120.]})
     result = backtest.run_backtest(candles, BotConfig(initial_equity=10000, fee_rate=0, slippage_rate=0), funding, "mark")
