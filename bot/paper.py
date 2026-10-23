@@ -11,9 +11,10 @@ from .strategy import generate_signals
 def evaluate_latest(csv_path: str, config: BotConfig | None = None) -> dict:
     data = pd.read_csv(csv_path)
     signals = generate_signals(data, config or BotConfig())
-    if signals.empty:
-        raise ValueError("No candle data available")
-    row = signals.iloc[-1]
+    if len(signals) < 2:
+        raise ValueError("At least two candles are required to exclude the possibly incomplete latest candle")
+    # The newest candle may still be forming; only journal the latest completed bar.
+    row = signals.iloc[-2]
     return {
         "timestamp": str(row["timestamp"]),
         "close": float(row["close"]),
