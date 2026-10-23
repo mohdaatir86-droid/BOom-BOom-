@@ -1,0 +1,14 @@
+# Backtest verification gates
+
+Before interpreting any strategy result as evidence, verify these cases in tests:
+
+1. Funding-adjusted trade PnL is the PnL used by the final equity curve and all headline metrics.
+2. An empty funding file is reported as missing data, not zero funding observed.
+3. A stop crossed by a candle opening gap is filled from the opening price (plus adverse slippage), not optimistically at the stop.
+4. Daily realized loss limits halt new entries until the next UTC trading day; exits remain allowed.
+5. An open position is marked to market for drawdown, not only after a trade closes.
+6. The latest incomplete candle is excluded from any live-like signal evaluation.
+7. Walk-forward evaluation computes features with prior warm-up history but scores only trades in the held-out test interval.
+8. Fees, slippage, funding, contract size, tick/lot sizes, and liquidation assumptions are recorded with every experiment.
+
+Current limitations: the strategy is an unproven long-only EMA/RSI hypothesis; the backtester is not a complete Binance Futures simulator. Passing unit tests validates implementation behavior, not profitability. No live orders should be enabled based on these checks alone.
