@@ -80,6 +80,9 @@ def run_backtest(df, config=None, funding_df=None, funding_mark_price_column=Non
             mark = float(row["close"])
             unrealized = position["qty"] * (mark - position["entry"])
             unrealized -= position["qty"] * mark * (cfg.fee_rate + cfg.slippage_rate)
+        # Enforce the daily loss guard on realized plus marked-to-market PnL.
+        # This halts new entries; stop/target exits continue to be processed.
+        risk_state.check_daily_loss(unrealized, cfg.daily_loss_limit)
         marked_equity = equity + unrealized
         peak_marked_equity = max(peak_marked_equity, marked_equity)
         if peak_marked_equity > 0:
