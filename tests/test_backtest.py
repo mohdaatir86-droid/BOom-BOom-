@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 import bot.backtest as backtest
 from bot.config import BotConfig
@@ -27,3 +28,29 @@ def test_backtest_does_not_reenter_on_same_bar_as_exit(monkeypatch):
     # candle's open after using its later low to decide the prior trade exited.
     assert result["trades"] == 1
     assert result["trades_detail"][0]["reason"] == "stop"
+
+
+
+def test_funding_adjustment_is_reflected_in_final_equity(monkeypatch):
+    candles = pd.DataFrame({
+        "timestamp": pd.date_range("2025-01-01", periods=4, freq="h", tz="UTC"),
+        "open": [100.0] * 4, "high": [101.0] * 4, "low": [99.0] * 4,
+        "close": [100.0] * 4, "volume": [1.0] * 4,
+    })
+    signalled = candles.copy()
+    signalled["atr"] = [1.0] * 4
+    signalled["long_signal"] = [True, False, False, False]
+    monkeypatch.setattr(backtest, "generate_signals", lambda df, cfg: signalled.copy())
+    funding = pd.DataFrame({
+        "timestamp": pd.to_datetime(["2025-01-01T02:00:00Z"]),
+        "funding_rate": [0.01],
+    })
+    result = backtest.run_backtest(
+        candles,
+        BotConfig(initial_equity=10_000, risk_per_trade=0.01, fee_rate=0.0, slippage_rate=0.0),
+        funding_df=funding,
+    )
+    trade = result["trades_detail"][0]
+    assert trade["pnl_net"] == pytest.approx(trade["pnl_net_after_funding_estimate"])
+    assert trade["pnl_net"] < trade["pnl_net_before_funding"]
+    assert result["final_equity"] == pytest.approx(10_000 + trade["pnl_net"])

@@ -3,7 +3,7 @@ import pandas as pd
 from .config import BotConfig
 from .indicators import validate_ohlcv
 from .strategy import generate_signals
-from .risk import position_size, validate_long_trade
+from .risk import position_size, validate_long_trade, RiskState
 from .funding import apply_funding_to_trades
 from .metrics import equity_curve, summarize_trades
 
@@ -16,9 +16,18 @@ def run_backtest(df, config=None, funding_df=None):
     equity = float(cfg.initial_equity)
     position = None
     trades = []
+    risk_state = RiskState(start_of_day_equity=equity)
+    active_day = None
 
     for i in range(1, len(data)):
         row, prev = data.iloc[i], data.iloc[i - 1]
+        bar_time = pd.to_datetime(row["timestamp"], utc=True, errors="coerce")
+        if pd.isna(bar_time):
+            raise ValueError("Backtest timestamps must be valid")
+        bar_day = bar_time.date()
+        if active_day != bar_day:
+            active_day = bar_day
+            risk_state = RiskState(start_of_day_equity=equity)
         exited_this_bar = False
         if position:
             exit_price, reason = None, ""
@@ -32,6 +41,7 @@ def run_backtest(df, config=None, funding_df=None):
                 fees = position["qty"] * (position["entry"] + fill) * cfg.fee_rate
                 pnl = position["qty"] * (fill - position["entry"]) - fees
                 equity += pnl
+                risk_state.record_realized_pnl(pnl, cfg.daily_loss_limit)
                 trades.append({
                     "entry_time": position["time"], "exit_time": row["timestamp"],
                     "entry": position["entry"], "exit": fill, "qty": position["qty"],
@@ -41,7 +51,7 @@ def run_backtest(df, config=None, funding_df=None):
                 exited_this_bar = True
 
         # Signal is from completed prior candle; entry occurs at current open.
-        if position is None and not exited_this_bar and bool(prev["long_signal"]):
+        if position is None and not exited_this_bar and risk_state.can_open_new_position() and bool(prev["long_signal"]):
             entry = float(row["open"]) * (1 + cfg.slippage_rate)
             atr = float(prev["atr"])
             if pd.isna(atr) or atr <= 0:
