@@ -22,9 +22,13 @@ def evaluate_walk_forward(
 ) -> dict:
     """Score only test-period entries while retaining prior candles for indicator warm-up.
 
-    Each fold starts with fresh initial equity. Signals on the final warm-up candle
-    may trigger an entry at the first test candle's open, which is point-in-time valid.
-    This is a baseline diagnostic, not parameter optimization or a futures simulator.
+    Each fold starts with fresh initial equity (no equity carry-over). Returns and
+    drawdowns are therefore per-fold, not cumulative portfolio results. Only trades
+    whose entry_time falls inside the held-out test window are aggregated into the
+    out-of-sample metrics. Funding events are restricted to the same test window
+    (including fold start). Signals on the final warm-up candle may trigger an entry
+    at the first test candle's open (point-in-time valid). This is a baseline
+    diagnostic, not parameter optimization or a futures execution simulator.
     """
     if "timestamp" not in candles.columns:
         raise ValueError("timestamp column is required")
@@ -42,7 +46,8 @@ def evaluate_walk_forward(
         funding = funding_df
         if funding is not None and not funding.empty:
             funding_times = pd.to_datetime(funding["timestamp"], utc=True, errors="coerce")
-            funding = funding.loc[(funding_times > start) & (funding_times <= end)].copy()
+            # Include funding at fold start so an entry at the first test open can receive it.
+            funding = funding.loc[(funding_times >= start) & (funding_times <= end)].copy()
         result = run_backtest(
             segment,
             config or BotConfig(),
