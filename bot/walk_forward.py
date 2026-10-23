@@ -1,6 +1,8 @@
 """Leakage-aware rolling out-of-sample evaluation for the baseline strategy."""
 from __future__ import annotations
 
+import argparse
+import json
 import pandas as pd
 
 from .backtest import run_backtest
@@ -73,3 +75,31 @@ def evaluate_walk_forward(
         "out_of_sample_expectancy_per_trade": metrics["expectancy_per_trade"],
         "warning": "Out-of-sample historical evaluation only; not evidence of future profitability or live execution readiness.",
     }
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run rolling out-of-sample backtest folds.")
+    parser.add_argument("--csv", required=True, help="Chronological OHLCV CSV")
+    parser.add_argument("--funding-csv", help="Optional funding history CSV")
+    parser.add_argument("--equity", type=float, default=10000.0)
+    parser.add_argument("--train-size", type=int, default=500, help="Prior candles retained for indicator warm-up")
+    parser.add_argument("--test-size", type=int, default=100, help="Candles scored in each out-of-sample fold")
+    parser.add_argument("--step-size", type=int, help="Fold advance; defaults to test-size")
+    parser.add_argument("--funding-mark-price-column", help="Optional mark-price column in funding CSV")
+    args = parser.parse_args()
+    funding = pd.read_csv(args.funding_csv) if args.funding_csv else None
+    result = evaluate_walk_forward(
+        pd.read_csv(args.csv),
+        BotConfig(initial_equity=args.equity),
+        train_size=args.train_size,
+        test_size=args.test_size,
+        step_size=args.step_size,
+        funding_df=funding,
+        funding_mark_price_column=args.funding_mark_price_column,
+    )
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

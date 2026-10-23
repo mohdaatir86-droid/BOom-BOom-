@@ -28,6 +28,7 @@ python -m bot.data --exchange binance --symbol BTC/USDT --timeframe 1h --limit 5
 python -m bot.futures_data --exchange binanceusdm --symbol BTC/USDT --timeframe 1h --limit 1000 --out data/BTC_USDT_PERP_1h.csv --funding-out data/BTC_USDT_funding.csv
 python -m bot.open_interest --symbol BTCUSDT --period 1h --limit 500 --out data/BTC_USDT_open_interest.csv
 python -m bot.backtest --csv data/BTC_USDT_1h.csv --equity 10000
+python -m bot.walk_forward --csv data/BTC_USDT_1h.csv --train-size 500 --test-size 100 --equity 10000
 python -m bot.backtest --csv data/BTC_USDT_PERP_1h.csv --funding-csv data/BTC_USDT_funding.csv --equity 10000
 python -m bot.signal --csv data/BTC_USDT_1h.csv
 python -m bot.paper --csv data/BTC_USDT_1h.csv --journal data/paper_journal.jsonl
