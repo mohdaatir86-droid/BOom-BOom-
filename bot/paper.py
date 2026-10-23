@@ -164,7 +164,7 @@ def main():
     else:
         result = evaluate_latest(args.csv)
         append_journal(result, args.journal)
-    print(json.dumps(result, indent=2)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
