@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -47,6 +46,13 @@ def download_ohlcv(exchange_id="binance", symbol="BTC/USDT", timeframe="1h", lim
     exchange = exchange_class({"enableRateLimit": True})
     if not exchange.has.get("fetchOHLCV"):
         raise ValueError(f"{exchange_id} does not support OHLCV fetching through CCXT")
+
+    # Binance documents this host specifically for unauthenticated public market
+    # data. Use the official market-data-only REST base rather than the general
+    # API host; this is not an authenticated or order-capable endpoint.
+    if exchange_id == "binance":
+        exchange.urls["api"]["public"] = "https://data-api.binance.vision/api/v3"
+
     exchange.load_markets()
     if symbol not in exchange.markets:
         raise ValueError(f"Symbol {symbol!r} is not listed on {exchange_id}")
