@@ -5,6 +5,8 @@ Safety-first crypto research scaffold. Current mode: **backtesting/paper signals
 ## What's in this repository
 - Read-only public spot OHLCV downloader via CCXT (no API keys needed)
 - Read-only USD-M futures candle and available funding-history downloader
+- Public Binance open-interest history downloader
+- Chronological holdout and walk-forward window utilities
 - OHLCV validation and EMA/RSI/ATR indicators
 - Long-only baseline signal hypothesis (not a proven profitable strategy)
 - Risk-based position sizing helper and daily realized-loss guard
@@ -24,6 +26,7 @@ pip install -r requirements.txt
 pytest -q
 python -m bot.data --exchange binance --symbol BTC/USDT --timeframe 1h --limit 500 --out data/BTC_USDT_1h.csv
 python -m bot.futures_data --exchange binanceusdm --symbol BTC/USDT --timeframe 1h --limit 1000 --out data/BTC_USDT_PERP_1h.csv --funding-out data/BTC_USDT_funding.csv
+python -m bot.open_interest --symbol BTCUSDT --period 1h --limit 500 --out data/BTC_USDT_open_interest.csv
 python -m bot.backtest --csv data/BTC_USDT_1h.csv --equity 10000
 python -m bot.backtest --csv data/BTC_USDT_PERP_1h.csv --funding-csv data/BTC_USDT_funding.csv --equity 10000
 python -m bot.signal --csv data/BTC_USDT_1h.csv
