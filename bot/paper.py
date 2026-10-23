@@ -90,6 +90,7 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
     else:
         state = {"equity": float(cfg.initial_equity), "position": None, "last_timestamp": None,
                  "realized_pnl_today": 0.0, "active_day": None, "halted": False}
+    state.setdefault("start_of_day_equity", float(state["equity"]))
     if state.get("position") is not None:
         state["position"] = dict(state["position"])
     events = []
@@ -105,6 +106,8 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
         day = ts.date().isoformat()
         if state.get("active_day") != day:
             state["active_day"], state["realized_pnl_today"], state["halted"] = day, 0.0, False
+            state["start_of_day_equity"] = float(state["equity"])
+        exited_this_bar = False
         pos = state.get("position")
         if pos:
             exit_px, reason = None, None
@@ -126,10 +129,11 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
                 _append_event_once(trade, journal_path)
                 events.append(trade)
                 state["position"] = None
-                if state["realized_pnl_today"] <= -state["equity"] * cfg.daily_loss_limit:
+                exited_this_bar = True
+                if state["realized_pnl_today"] <= -state["start_of_day_equity"] * cfg.daily_loss_limit:
                     state["halted"] = True
                 pos = None
-        if pos is None and not state["halted"] and bool(prev["long_signal"]):
+        if pos is None and not exited_this_bar and not state["halted"] and bool(prev["long_signal"]):
             atr = float(prev["atr"])
             if pd.notna(atr) and atr > 0:
                 entry = float(row["open"]) * (1 + cfg.slippage_rate)
@@ -145,6 +149,16 @@ def run_paper_simulation(candles: pd.DataFrame, config: BotConfig | None = None,
                                  "equity": state["equity"], "mode": "PAPER_ONLY"}
                         _append_event_once(trade, journal_path)
                         events.append(trade)
+        # Mark open positions to market for the daily-loss guard. The halt blocks
+        # new entries only; existing positions still follow stop/target exits.
+        current_position = state.get("position")
+        unrealized = 0.0
+        if current_position is not None:
+            mark = float(row["close"])
+            unrealized = float(current_position["qty"]) * (mark - float(current_position["entry"]))
+            unrealized -= float(current_position["qty"]) * mark * (cfg.fee_rate + cfg.slippage_rate)
+        if state["realized_pnl_today"] + unrealized <= -state["start_of_day_equity"] * cfg.daily_loss_limit:
+            state["halted"] = True
         state["last_timestamp"] = iso
         _save_state_atomic(state, state_file)
     return {"mode": "PAPER_ONLY", "events_processed": len(events), "state": state,
