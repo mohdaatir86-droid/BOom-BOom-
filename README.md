@@ -43,3 +43,14 @@ CSV columns: `timestamp,open,high,low,close,volume`, strictly chronological, wit
 - This is not proof of a profitable edge. Do not deploy to live trading based on these results.
 - Before live trading: add reliable exchange data, venue-specific costs/funding, chronological out-of-sample and walk-forward tests, robust order reconciliation, monitoring, hard exposure/drawdown controls, and independently tested emergency stop.
 - Store secrets only in environment/secret management; never commit API keys.
+
+## Point-in-time open-interest features
+
+Align public open-interest snapshots to candles without look-ahead bias:
+
+```python
+from bot.market_features import align_open_interest
+features = align_open_interest(candles, open_interest, tolerance="2h")
+```
+
+This backward-only timestamp join prevents future OI records from being attached to earlier candles. See [`docs/OPEN_INTEREST_FEATURES.md`](docs/OPEN_INTEREST_FEATURES.md) for caveats and example details. The feature is not yet a validated trading signal.
