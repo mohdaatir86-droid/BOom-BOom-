@@ -42,7 +42,7 @@ def test_market_rules_parse_and_round_market_quantity_separately():
             {"filterType": "MIN_NOTIONAL", "notional": "5", "minNotional": "5"},
         ],
     })
-    assert rules.validate_order(0.019, 100, market=True) == pytest.approx((0.01, 100))
+    assert rules.validate_order(0.059, 100, market=True) == pytest.approx((0.05, 100))
     with pytest.raises(ValueError, match="minimum"):
         rules.validate_order(0.009, 100, market=True)
     with pytest.raises(ValueError, match="TRADING"):
