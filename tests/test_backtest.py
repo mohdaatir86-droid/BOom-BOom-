@@ -76,3 +76,37 @@ def test_stop_gap_fills_at_open_not_stop(monkeypatch):
     trade = result["trades_detail"][0]
     assert trade["reason"] == "stop_gap"
     assert trade["exit"] == 95.0
+
+
+def test_walk_forward_uses_prior_history_but_gates_each_test_fold(monkeypatch):
+    candles = pd.DataFrame({
+        "timestamp": pd.date_range("2025-01-01", periods=12, freq="h", tz="UTC"),
+        "open": [100.0] * 12, "high": [101.0] * 12, "low": [99.0] * 12,
+        "close": [100.0] * 12, "volume": [1.0] * 12,
+    })
+    calls = []
+
+    def fake_backtest(history, config=None, funding_df=None, funding_mark_price_column=None, trade_start_time=None):
+        calls.append((len(history), trade_start_time, history["timestamp"].iloc[-1]))
+        return {
+            "trades": 0, "final_equity": 10000.0, "net_pnl": 0.0, "return_pct": 0.0,
+            "max_drawdown_pct": 0.0, "profit_factor": 0.0, "funding_warning": None,
+        }
+
+    monkeypatch.setattr(backtest, "run_backtest", fake_backtest)
+    result = backtest.walk_forward_evaluate(candles, folds=3, config=BotConfig())
+    assert len(result["folds"]) == 3
+    assert result["total_test_candles"] == 9
+    assert [call[0] for call in calls] == sorted(call[0] for call in calls)
+    assert all(call[1] <= call[2] for call in calls)
+    assert len({call[1] for call in calls}) == 3
+
+
+def test_walk_forward_rejects_duplicate_timestamps():
+    candles = pd.DataFrame({
+        "timestamp": pd.to_datetime(["2025-01-01T00:00:00Z"] * 6),
+        "open": [100.0] * 6, "high": [101.0] * 6, "low": [99.0] * 6,
+        "close": [100.0] * 6, "volume": [1.0] * 6,
+    })
+    with pytest.raises(ValueError, match="unique"):
+        backtest.walk_forward_evaluate(candles, folds=2)
