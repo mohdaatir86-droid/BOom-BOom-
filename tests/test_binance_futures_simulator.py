@@ -119,3 +119,13 @@ def test_order_count_filters_are_parsed_and_enforced():
         rules.validate_order_capacity(open_orders=1, open_algo_orders=3)
     with pytest.raises(ValueError, match="non-negative"):
         rules.validate_order_capacity(open_orders=-1)
+
+
+
+def test_cross_margin_missing_or_invalid_mark_fails_with_clear_error():
+    p = CrossPosition("BTCUSDT", "LONG", 1, 100, sample_brackets(), liquidation_fee_rate=0.001)
+    account = CrossMarginAccount(100, [p])
+    with pytest.raises(ValueError, match="missing mark prices"):
+        account.equity({})
+    with pytest.raises(ValueError, match="mark price"):
+        account.maintenance_margin({"BTCUSDT": 0})

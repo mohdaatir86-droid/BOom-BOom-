@@ -258,14 +258,25 @@ class CrossMarginAccount:
     def __post_init__(self) -> None:
         _number("wallet_balance", self.wallet_balance)
 
+    def _validated_marks(self, marks: Mapping[str, float]) -> dict[str, float]:
+        required = {p.symbol for p in self.positions}
+        missing = sorted(required - set(marks))
+        if missing:
+            raise ValueError(f"missing mark prices for open positions: {', '.join(missing)}")
+        return {symbol: _number(f"mark price for {symbol}", marks[symbol], strict=True)
+                for symbol in required}
+
     def equity(self, marks: Mapping[str, float]) -> float:
-        return self.wallet_balance + sum(p.pnl(marks[p.symbol]) for p in self.positions)
+        prices = self._validated_marks(marks)
+        return self.wallet_balance + sum(p.pnl(prices[p.symbol]) for p in self.positions)
 
     def maintenance_margin(self, marks: Mapping[str, float]) -> float:
-        return sum(p.maintenance_margin(marks[p.symbol]) for p in self.positions)
+        prices = self._validated_marks(marks)
+        return sum(p.maintenance_margin(prices[p.symbol]) for p in self.positions)
 
     def liquidation_fee_reserve(self, marks: Mapping[str, float]) -> float:
-        return sum(p.liquidation_fee_reserve(marks[p.symbol]) for p in self.positions)
+        prices = self._validated_marks(marks)
+        return sum(p.liquidation_fee_reserve(prices[p.symbol]) for p in self.positions)
 
     def margin_ratio(self, marks: Mapping[str, float]) -> float:
         mm = self.maintenance_margin(marks)
